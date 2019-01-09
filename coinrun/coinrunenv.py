@@ -211,6 +211,74 @@ class CoinRunVecEnv(VecEnv):
         
         return obs_frames, self.buf_rew, self.buf_done, self.dummy_info
 
+
+class CoinRunVecEnvPytorch(CoinRunVecEnv):
+    """
+    Pytorch wrapper for CoinRunVecEnv. Observation space and Frames are transposed for use with PyTorch.
+    This is the CoinRun VecEnv, all CoinRun environments are just instances
+    of this class with different values for `game_type`
+
+    `game_type`: int game type corresponding to the game type to create, see `enum GameType` in `coinrun.cpp`
+    `num_envs`: number of environments to create in this VecEnv
+    `lump_n`: only used when the environment creates `monitor.csv` files
+    `default_zoom`: controls how much of the level the agent can see
+    """
+
+    def __init__(self, game_type, num_envs, lump_n=0, default_zoom=5.0):
+        self.metadata = {'render.modes': []}
+        self.reward_range = (-float('inf'), float('inf'))
+
+        self.NUM_ACTIONS = lib.get_NUM_ACTIONS()
+        self.RES_W = lib.get_RES_W()
+        self.RES_H = lib.get_RES_H()
+        self.VIDEORES = lib.get_VIDEORES()
+
+        self.buf_rew = np.zeros([num_envs], dtype=np.float32)
+        self.buf_done = np.zeros([num_envs], dtype=np.bool)
+        self.buf_rgb = np.zeros([num_envs, self.RES_H, self.RES_W, 3], dtype=np.uint8)
+        self.hires_render = Config.IS_HIGH_RES
+        if self.hires_render:
+            self.buf_render_rgb = np.zeros([num_envs, self.VIDEORES, self.VIDEORES, 3], dtype=np.uint8)
+        else:
+            self.buf_render_rgb = np.zeros([1, 1, 1, 1], dtype=np.uint8)
+
+        num_channels = 1 if Config.USE_BLACK_WHITE else 3
+        obs_space = gym.spaces.Box(0, 255, shape=[num_channels, self.RES_H, self.RES_W], dtype=np.uint8)
+
+        super(CoinRunVecEnv, self).__init__(
+            num_envs=num_envs,
+            observation_space=obs_space,
+            action_space=gym.spaces.Discrete(self.NUM_ACTIONS),
+        )
+        self.handle = lib.vec_create(
+            game_versions[game_type],
+            self.num_envs,
+            lump_n,
+            self.hires_render,
+            default_zoom)
+        self.dummy_info = [{} for _ in range(num_envs)]
+
+    def step_wait(self):
+        self.buf_rew = np.zeros_like(self.buf_rew)
+        self.buf_done = np.zeros_like(self.buf_done)
+
+        lib.vec_wait(
+            self.handle,
+            self.buf_rgb,
+            self.buf_render_rgb,
+            self.buf_rew,
+            self.buf_done)
+
+        obs_frames = self.buf_rgb
+
+        if Config.USE_BLACK_WHITE:
+            obs_frames = np.mean(obs_frames, axis=-1).astype(np.uint8)[..., None]
+
+        obs_frames = obs_frames.transpose([0, 3, 1, 2])
+
+        return obs_frames, self.buf_rew, self.buf_done, self.dummy_info
+
+
 def make(env_id, num_envs, **kwargs):
     assert env_id in game_versions, 'cannot find environment "%s", maybe you mean one of %s' % (env_id, list(game_versions.keys()))
-    return CoinRunVecEnv(env_id, num_envs, **kwargs)
+    return CoinRunVecEnvPytorch(env_id, num_envs, **kwargs)
