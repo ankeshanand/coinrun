@@ -84,6 +84,7 @@ lib.vec_wait.argtypes = [
     npct.ndpointer(dtype=np.uint8, ndim=4),    # larger rgb for render()
     npct.ndpointer(dtype=np.float32, ndim=1),  # rew
     npct.ndpointer(dtype=np.bool, ndim=1),     # done
+    npct.ndpointer(dtype=np.int32, ndim=1),    # level_seeds
     ]
 
 already_inited = False
@@ -236,6 +237,7 @@ class CoinRunVecEnvPytorch(CoinRunVecEnv):
 
         self.buf_rew = np.zeros([num_envs], dtype=np.float32)
         self.buf_done = np.zeros([num_envs], dtype=np.bool)
+        self.level_seeds = np.zeros([num_envs], dtype=np.int32)
         self.buf_rgb = np.zeros([num_envs, self.RES_H, self.RES_W, 3], dtype=np.uint8)
         self.hires_render = Config.IS_HIGH_RES
         if self.hires_render:
@@ -268,7 +270,9 @@ class CoinRunVecEnvPytorch(CoinRunVecEnv):
             self.buf_rgb,
             self.buf_render_rgb,
             self.buf_rew,
-            self.buf_done)
+            self.buf_done,
+            self.level_seeds
+        )
 
         obs_frames = self.buf_rgb
 
@@ -276,6 +280,7 @@ class CoinRunVecEnvPytorch(CoinRunVecEnv):
             obs_frames = np.mean(obs_frames, axis=-1).astype(np.uint8)[..., None]
 
         obs_frames = obs_frames.transpose([0, 3, 1, 2])
+        self.dummy_info = [{'level_seed': x} for x in self.level_seeds]
 
         return obs_frames, self.buf_rew, self.buf_done, self.dummy_info
 

@@ -251,6 +251,8 @@ public:
   float max_speed;
   float mix_rate;
 
+  int level_seed;
+
   std::vector<std::shared_ptr<Monster>> monsters;
 
   Maze(const int _w, const int _h, int _game_type)
@@ -1153,6 +1155,7 @@ struct Agent {
   bool support;
   FILE *monitor_csv = 0;
   double t0;
+  int level_seed = 0;
 
   ~Agent() {
     if (render_hires_buf) {
@@ -1461,6 +1464,7 @@ void state_reset(const std::shared_ptr<State>& state, int game_type)
   int h = 64;
   state->maze.reset(new Maze(w, h, game_type));
   maze_gen.maze = state->maze;
+  state->maze->level_seed = level_seed;
 
   maze_gen.initial_floor_and_walls(game_type);
 
@@ -1931,7 +1935,8 @@ void vec_wait(
   uint8_t* obs_rgb,
   uint8_t* obs_hires_rgb,
   float* rew,
-  bool* done)
+  bool* done,
+  int* level_seeds)
 {
   std::shared_ptr<VectorOfStates> vstate = vstate_find(handle);
   while (1) {
@@ -1963,6 +1968,7 @@ void vec_wait(
     done[e] = a.game_over;
     a.reward = 0;
     a.game_over = false;
+    level_seeds[e] = a.maze->level_seed;
   }
 }
 
@@ -2107,7 +2113,8 @@ public:
     uint8_t bufrgb[RES_W * RES_H * 3];
     float bufrew[1];
     bool bufdone[1];
-    vec_wait(viz->control_handle, bufrgb, 0, bufrew, bufdone);
+    int bufseed[1];
+    vec_wait(viz->control_handle, bufrgb, 0, bufrew, bufdone, bufseed);
     // fprintf(stderr, "%+0.2f %+0.2f %+0.2f\n", bufvel[0], bufvel[1], bufvel[2]);
   }
 
